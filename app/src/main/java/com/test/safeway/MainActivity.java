@@ -31,8 +31,11 @@ import com.here.sdk.mapviewlite.MapStyle;
 import com.here.sdk.mapviewlite.MapViewLite;
 import com.here.sdk.mapviewlite.PixelFormat;
 import com.here.sdk.routing.CalculateRouteCallback;
+import com.here.sdk.routing.OptimizationMode;
 import com.here.sdk.routing.PedestrianOptions;
 import com.here.sdk.routing.Route;
+import com.here.sdk.routing.RouteOptions;
+import com.here.sdk.routing.RouteTextOptions;
 import com.here.sdk.routing.RoutingEngine;
 import com.here.sdk.routing.RoutingError;
 import com.here.sdk.routing.Section;
@@ -220,13 +223,16 @@ public class MainActivity extends AppCompatActivity {
 
         List<Waypoint> waypoints = new ArrayList<>(Arrays.asList(startWaypoint, destinationWaypoint));
 
-        routingEngine.calculateRoute(waypoints, new PedestrianOptions(), new CalculateRouteCallback() {
+        routingEngine.calculateRoute(waypoints, new PedestrianOptions(new RouteOptions(OptimizationMode.FASTEST, 5, null), new RouteTextOptions()), new CalculateRouteCallback() {
                     @Override
                     public void onRouteCalculated(@Nullable RoutingError routingError, @Nullable List<Route> routes) {
                         if (routingError == null) {
-                            Route route = routes.get(0);
-                            showRouteDetails(route);
-                            showRouteOnMap(route);
+                            for(int j = 0; j < routes.size(); j++){
+                                Route route = routes.get(j);
+                                showRouteDetails(route);
+                                showRouteOnMap(route);
+                            }
+
                         } else {
                             showDialog("Error while calculating a route:", routingError.toString());
                         }
