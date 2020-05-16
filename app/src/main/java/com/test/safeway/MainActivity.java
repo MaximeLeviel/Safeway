@@ -18,12 +18,17 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 
+import com.here.sdk.core.Anchor2D;
 import com.here.sdk.core.GeoCircle;
 import com.here.sdk.core.GeoCoordinates;
 import com.here.sdk.core.GeoPolyline;
 import com.here.sdk.core.errors.InstantiationErrorException;
 import com.here.sdk.mapviewlite.MapCircle;
 import com.here.sdk.mapviewlite.MapCircleStyle;
+import com.here.sdk.mapviewlite.MapImage;
+import com.here.sdk.mapviewlite.MapImageFactory;
+import com.here.sdk.mapviewlite.MapMarker;
+import com.here.sdk.mapviewlite.MapMarkerImageStyle;
 import com.here.sdk.mapviewlite.MapPolyline;
 import com.here.sdk.mapviewlite.MapPolylineStyle;
 import com.here.sdk.mapviewlite.MapScene;
@@ -179,8 +184,6 @@ public class MainActivity extends AppCompatActivity {
 
         //Vérifie qu'on a les autorisations. Meme si on a déjà verifié avec notre propre code dans handlepermissions, il dit qu'il y a une erreur si on n'utilise pas leur code...
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
             // here to request the missing permissions, and then overriding
             //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
             //                                          int[] grantResults)
@@ -230,17 +233,17 @@ public class MainActivity extends AppCompatActivity {
                             for(int j = 0; j < routes.size(); j++){
                                 Route route = routes.get(j);
                                 showRouteDetails(route);
-                                showRouteOnMap(route);
+                                showRouteOnMap(route, destinationCoordinates);
                             }
-
-                        } else {
+                        }
+                        else {
                             showDialog("Error while calculating a route:", routingError.toString());
                         }
                     }
                 });
     }
 
-    private void showRouteOnMap(Route route) {
+    private void showRouteOnMap(Route route, GeoCoordinates destination) {
         // Show route as polyline.
         GeoPolyline routeGeoPolyline;
         try {
@@ -251,12 +254,20 @@ public class MainActivity extends AppCompatActivity {
         }
         MapPolylineStyle mapPolylineStyle = new MapPolylineStyle();
         mapPolylineStyle.setColor(0x00908AA0, PixelFormat.RGBA_8888);
-        mapPolylineStyle.setWidth(10);
+        mapPolylineStyle.setWidthInPixels(10);
         MapPolyline routeMapPolyline = new MapPolyline(routeGeoPolyline, mapPolylineStyle);
         mapView.getMapScene().addMapPolyline(routeMapPolyline);
         mapPolylines.add(routeMapPolyline);
 
-        // TODO:add a marker at end.
+        //show destination wth a marker
+        MapImage mapImage = MapImageFactory.fromResource(MainActivity.this.getResources(), R.drawable.poi);
+        MapMarker mapMarker = new MapMarker(destination);
+
+        MapMarkerImageStyle mapMarkerImageStyle = new MapMarkerImageStyle();
+        mapMarkerImageStyle.setAnchorPoint(new Anchor2D(0.5F, 1));
+
+        mapMarker.addImage(mapImage, mapMarkerImageStyle);
+        mapView.getMapScene().addMapMarker(mapMarker);
     }
 
     private void showRouteDetails(Route route) {
