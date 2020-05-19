@@ -9,6 +9,7 @@ import androidx.core.app.ActivityCompat;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.database.sqlite.SQLiteDatabase;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -17,11 +18,14 @@ import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ImageButton;
 
 import com.here.sdk.core.Anchor2D;
+import com.here.sdk.core.Color;
 import com.here.sdk.core.GeoCircle;
 import com.here.sdk.core.GeoCoordinates;
 import com.here.sdk.core.GeoPolyline;
+import com.here.sdk.core.Metadata;
 import com.here.sdk.core.errors.InstantiationErrorException;
 import com.here.sdk.mapviewlite.MapCircle;
 import com.here.sdk.mapviewlite.MapCircleStyle;
@@ -52,6 +56,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
+import static android.graphics.Color.pack;
+
 
 public class MainActivity extends AppCompatActivity {
 
@@ -64,18 +70,25 @@ public class MainActivity extends AppCompatActivity {
 
     private MapScene mapScene;
     private MapCircle mapCircle;
-    private Button button;
+    private ImageButton button;
 
     private RoutingEngine routingEngine;
     private GeoCoordinates currentLocation;
     private final List<MapPolyline> mapPolylines = new ArrayList<>();
+    private DatabaseManager databaseManager;
 
+    private  GeoCoordinates destinationCoordinates;
+
+    private List<MapMarker> mapMarkerList = new ArrayList<>();
 
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        databaseManager = new DatabaseManager(this);
+        //databaseManager.addHandler(new GeoCoordinates(48.859306, 2.305487), 6);
 
         // Get a MapViewLite instance from the layout.
         mapView = findViewById(R.id.map_view);
@@ -85,10 +98,11 @@ public class MainActivity extends AppCompatActivity {
 
         updateLocation();
 
-        button = findViewById(R.id.button2);
+        button = findViewById(R.id.searchButton);
         button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                clearMap();
                 Intent intent = new Intent(MainActivity.this, Search.class);
                 GeoCoordinates centerMap = mapView.getCamera().getTarget();
                 double latitude = centerMap.latitude;
@@ -204,7 +218,7 @@ public class MainActivity extends AppCompatActivity {
         {
             Bundle b = data.getExtras();
             assert b != null;
-            GeoCoordinates destinationCoordinates = new GeoCoordinates( b.getDouble("Latitude"), b.getDouble("Longitude"));
+            destinationCoordinates = new GeoCoordinates( b.getDouble("Latitude"), b.getDouble("Longitude"));
             try {
                 routingEngine = new RoutingEngine();
             } catch (InstantiationErrorException e) {
@@ -230,10 +244,25 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onRouteCalculated(@Nullable RoutingError routingError, @Nullable List<Route> routes) {
                         if (routingError == null) {
+                            List<List<RiskLocation>> riskLocations = new ArrayList<>();
                             for(int j = 0; j < routes.size(); j++){
                                 Route route = routes.get(j);
-                                showRouteDetails(route);
-                                showRouteOnMap(route, destinationCoordinates);
+                                riskLocations.add(new ArrayList<RiskLocation>());
+                                safeRoad(route.getPolyline(), riskLocations.get(j));
+                            }
+
+                            int safest = safestRoute(riskLocations);
+                            if(safest == 0){
+                                showRouteDetails(routes.get(0));
+                                showRouteOnMap(routes.get(0), destinationCoordinates, 0x00908AA0);
+                            }
+                            else{
+                                showRouteDetails((routes.get(safest)));
+                                showRouteOnMap(routes.get(safest), destinationCoordinates, 0x00908AA0);
+
+                                //show fastest road in red
+                                //TODO: check it doesn't appear
+                                showRouteOnMap(routes.get(0), destinationCoordinates,  0x80ff0000); //255 = noir ?
                             }
                         }
                         else {
@@ -243,7 +272,7 @@ public class MainActivity extends AppCompatActivity {
                 });
     }
 
-    private void showRouteOnMap(Route route, GeoCoordinates destination) {
+    private void showRouteOnMap(Route route, GeoCoordinates destination, long color) {
         // Show route as polyline.
         GeoPolyline routeGeoPolyline;
         try {
@@ -253,21 +282,15 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         MapPolylineStyle mapPolylineStyle = new MapPolylineStyle();
-        mapPolylineStyle.setColor(0x00908AA0, PixelFormat.RGBA_8888);
+        mapPolylineStyle.setColor(color, PixelFormat.RGBA_8888);
         mapPolylineStyle.setWidthInPixels(10);
         MapPolyline routeMapPolyline = new MapPolyline(routeGeoPolyline, mapPolylineStyle);
         mapView.getMapScene().addMapPolyline(routeMapPolyline);
         mapPolylines.add(routeMapPolyline);
 
-        //show destination wth a marker
-        MapImage mapImage = MapImageFactory.fromResource(MainActivity.this.getResources(), R.drawable.poi);
-        MapMarker mapMarker = new MapMarker(destination);
+        databaseManager.getRedPoints(destination);
 
-        MapMarkerImageStyle mapMarkerImageStyle = new MapMarkerImageStyle();
-        mapMarkerImageStyle.setAnchorPoint(new Anchor2D(0.5F, 1));
-
-        mapMarker.addImage(mapImage, mapMarkerImageStyle);
-        mapView.getMapScene().addMapMarker(mapMarker);
+        addDestinationMarker();
     }
 
     private void showRouteDetails(Route route) {
@@ -300,6 +323,78 @@ public class MainActivity extends AppCompatActivity {
         int remainingMeters = meters % 1000;
 
         return String.format(Locale.getDefault(), "%02d.%02d km", kilometers, remainingMeters);
+    }
+
+    private void safeRoad(List<GeoCoordinates> geoCoordinates, List<RiskLocation> IDs){
+        for (int i = 0; i < geoCoordinates.size() - 1; i++){
+            safeSection(geoCoordinates.get(i), geoCoordinates.get(i + 1), IDs);
+        }
+    }
+
+    private void safeSection(GeoCoordinates start, GeoCoordinates end, List<RiskLocation> IDs){
+        if (start.distanceTo(end) > 150){
+            double latitude = (start.latitude + end.latitude)/2;
+            double longitude = (start.longitude + end.longitude)/2;
+            GeoCoordinates middle = new GeoCoordinates(latitude, longitude);
+            safeSection(start, middle, IDs);
+            safeSection(middle, end, IDs);
+        }
+        else{
+            List itemsIDs = databaseManager.getRedPoints(start);
+            for (int i = 0; i < itemsIDs.size(); i++){
+                RiskLocation itemID = (RiskLocation) itemsIDs.get(i);
+                if(!IDs.contains(itemID)){
+                    IDs.add(itemID);
+                }
+            }
+        }
+    }
+
+    private int safestRoute(List<List<RiskLocation>> riskLocations){
+        int shortest = 0;
+        for(int i = 0; i < riskLocations.size(); i++){
+            if(riskLocations.get(i).size() < riskLocations.get(shortest).size()){
+                shortest = i;
+            }
+        }
+        return shortest;
+    }
+
+    private void addDestinationMarker() {
+        MapImage mapImage = MapImageFactory.fromResource(MainActivity.this.getResources(), R.drawable.poi);
+
+        MapMarker mapMarker = new MapMarker(destinationCoordinates);
+
+        // The bottom, middle position should point to the location.
+        // By default, the anchor point is set to 0.5, 0.5.
+        MapMarkerImageStyle mapMarkerImageStyle = new MapMarkerImageStyle();
+        mapMarkerImageStyle.setAnchorPoint(new Anchor2D(0.5F, 1));
+
+        mapMarker.addImage(mapImage, mapMarkerImageStyle);
+
+        Metadata metadata = new Metadata();
+        metadata.setString("key_poi", "This is a POI.");
+        mapMarker.setMetadata(metadata);
+
+        mapView.getMapScene().addMapMarker(mapMarker);
+        mapMarkerList.add(mapMarker);
+    }
+
+    private void addCircleMapMarker(GeoCoordinates geoCoordinates) {
+        MapImage mapImage = MapImageFactory.fromResource(MainActivity.this.getResources(), R.drawable.circle);
+
+        MapMarker mapMarker = new MapMarker(geoCoordinates);
+        mapMarker.addImage(mapImage, new MapMarkerImageStyle());
+
+        mapView.getMapScene().addMapMarker(mapMarker);
+        mapMarkerList.add(mapMarker);
+    }
+
+    public void clearMap() {
+        for (MapMarker mapMarker : mapMarkerList) {
+            mapView.getMapScene().removeMapMarker(mapMarker);
+        }
+        mapMarkerList.clear();
     }
 
     @Override

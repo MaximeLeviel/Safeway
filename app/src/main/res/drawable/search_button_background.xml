@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:width="80dp"
+        android:height="60dp">
+        <shape android:shape="rectangle">
+            <solid
+                android:color="@color/white"/>
+
+            <corners
+                android:topLeftRadius="40mm"
+                android:bottomLeftRadius="40mm"/>
+            <stroke
+                android:width="1dp"/>
+        </shape>
+    </item>
+    <item android:width="50dp"
+        android:height="50dp"
+        android:gravity="center">
+        <bitmap
+            android:src="@drawable/search"/>
+    </item>
+</layer-list>
