@@ -131,5 +131,27 @@ public class DatabaseManager extends SQLiteOpenHelper {
         return itemIds;
     }
 
+    public List<RiskLocation> getAll(){
+        SQLiteDatabase db = this.getWritableDatabase();
+        Cursor cursor = db.rawQuery("Select * FROM " + TABLE_NAME, null);
+
+        List<RiskLocation> itemIds = new ArrayList<RiskLocation>();
+        while(cursor.moveToNext()) {
+            int ID = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_ID));
+
+            double latitude = cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_LATITUDE));
+            double longitude = cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_LONGITUDE));
+            GeoCoordinates geoCoordinates = new GeoCoordinates(latitude, longitude);
+
+            int note = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_NOTE));
+
+            itemIds.add(new RiskLocation(ID, geoCoordinates, note));
+        }
+        cursor.close();
+        db.close();
+
+        return itemIds;
+    }
+
 
 }

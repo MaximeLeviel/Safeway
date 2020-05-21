@@ -98,12 +98,6 @@ public class Search extends AppCompatActivity {
         int maxItems = 5;
         SearchOptions searchOptions = new SearchOptions(LanguageCode.FR_FR, maxItems);
 
-        /*try {
-            reverseGeocodingEngine = new ReverseGeocodingEngine();
-        } catch (InstantiationErrorException e) {
-            new RuntimeException("Initialization of ReverseGeocodingEngine failed: " + e.error.name());
-        }*/
-
         editText = findViewById(R.id.EditText);
 
         editText.addTextChangedListener(new TextWatcher() {
@@ -124,24 +118,6 @@ public class Search extends AppCompatActivity {
         });
     }
 
-    /*private void getAddressForCoordinates(GeoCoordinates geoCoordinates) {
-        // By default results are localized in EN_US.
-        ReverseGeocodingOptions reverseGeocodingOptions = new ReverseGeocodingOptions(LanguageCode.FR_FR);
-
-        reverseGeocodingEngine.searchAddress(
-                geoCoordinates, reverseGeocodingOptions, new ReverseGeocodingEngine.Callback() {
-                    @Override
-                    public void onSearchCompleted(@Nullable SearchError searchError,
-                                                  @Nullable Address address) {
-                        if (searchError != null || address == null) {
-                            location = "No results found";
-                            return;
-                        }
-                        location = address.addressText;
-                    }
-                });
-    }*/
-
     private void buildRecyclerView(){
         RecyclerView recyclerView = findViewById(R.id.my_recycler_view);
         recyclerView. setHasFixedSize(true);
@@ -158,9 +134,6 @@ public class Search extends AppCompatActivity {
         public void onClick(View view) {
             RecyclerView.ViewHolder viewHolder = (RecyclerView.ViewHolder) view.getTag();
             int position = viewHolder.getAdapterPosition();
-            // viewHolder.getItemId();
-            // viewHolder.getItemViewType();
-            // viewHolder.itemView;
             SearchResults thisItem = searchResults.get(position);
 
             Intent intent = new Intent();

@@ -1,4 +1,17 @@
 <resources>
     <string name="app_name">Safeway</string>
-    <string name="search">search</string>
+    <string name="search">Search</string>
+    <string name="disturbance_type">What is the type of the disturbance your having ?</string>
+    <string name="check">It is a one time disturbance</string>
+    <string name="at_time">It is related to the time of the day</string>
+    <string name="disturbance_title">Please choose an option</string>
+    <string name="comment">Let us now anything more about the situation here</string>
+    <string-array name="Disturbance">
+        <item>It is not well enough lighted</item>
+        <item>It is not very frequented</item>
+        <item>It is badly frequented</item>
+        <item>I have already been assaulted here</item>
+    </string-array>
+    <string name="next">Next</string>
+    <string name="send">Send</string>
 </resources>

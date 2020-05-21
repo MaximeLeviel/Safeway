@@ -7,6 +7,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
 import android.Manifest;
+import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.sqlite.SQLiteDatabase;
@@ -64,13 +65,17 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG = MainActivity.class.getSimpleName();
     private PermissionsRequestor permissionsRequestor;
     private MapViewLite mapView;
+    private MapMarker mapMarkerPOI;
 
     private LocationManager locationManager;
     private LocationListener listener;
+    private PlatformPositioningProvider platformPositioningProvider;
+
 
     private MapScene mapScene;
     private MapCircle mapCircle;
-    private ImageButton button;
+    private ImageButton searchButton;
+    private ImageButton reportButton;
 
     private RoutingEngine routingEngine;
     private GeoCoordinates currentLocation;
@@ -96,13 +101,16 @@ public class MainActivity extends AppCompatActivity {
 
         handleAndroidPermissions();
 
+        loadMapScene();
+
         updateLocation();
 
-        button = findViewById(R.id.searchButton);
-        button.setOnClickListener(new View.OnClickListener() {
+        showAll();
+
+        searchButton = findViewById(R.id.searchButton);
+        searchButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                clearMap();
                 Intent intent = new Intent(MainActivity.this, Search.class);
                 GeoCoordinates centerMap = mapView.getCamera().getTarget();
                 double latitude = centerMap.latitude;
@@ -111,6 +119,19 @@ public class MainActivity extends AppCompatActivity {
                 intent.putExtra("mapViewLongitude", longitude);
                 startActivityForResult(intent, 2);// Activity is started with requestCode 2
                 //startActivity(intent);
+            }
+        });
+
+        reportButton = findViewById(R.id.reportButton);
+        reportButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(MainActivity.this, ReportActivity.class);
+                double latitude = currentLocation.latitude;
+                double longitude = currentLocation.longitude;
+                intent.putExtra("locationLatitude", latitude);
+                intent.putExtra("locationLongitude", longitude);
+                startActivityForResult(intent, 3);
             }
         });
 
@@ -166,65 +187,33 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateLocation(){
-        locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
-
-        loadMapScene();
-
-        listener = new LocationListener() {
+        platformPositioningProvider = new PlatformPositioningProvider(MainActivity.this);
+        platformPositioningProvider.startLocating(new PlatformPositioningProvider.PlatformLocationListener() {
             @Override
-            public void onLocationChanged(Location location) {
+            public void onLocationUpdated(android.location.Location location) {
                 currentLocation = new GeoCoordinates(location.getLatitude(), location.getLongitude());
                 showLocation(location, mapView);
                 mapView.getCamera().setTarget(currentLocation);
                 mapView.getCamera().setZoomLevel(16);
             }
-
-            @Override
-            public void onStatusChanged(String provider, int status, Bundle extras) {
-
-            }
-
-            @Override
-            public void onProviderEnabled(String provider) {
-
-            }
-
-            @Override
-            public void onProviderDisabled(String provider) {
-                Intent i = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
-                startActivity(i);
-            }
-        };
-
-        //Vérifie qu'on a les autorisations. Meme si on a déjà verifié avec notre propre code dans handlepermissions, il dit qu'il y a une erreur si on n'utilise pas leur code...
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
-            return;
-        }
-
-        locationManager.requestLocationUpdates("gps", 5000, 10, listener);
+        });
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data)
-    {
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         // check if the request code is same as what is passed  here it is 2
-        if(requestCode==2)
-        {
+        if(requestCode==2){
             Bundle b = data.getExtras();
-            assert b != null;
-            destinationCoordinates = new GeoCoordinates( b.getDouble("Latitude"), b.getDouble("Longitude"));
-            try {
-                routingEngine = new RoutingEngine();
-            } catch (InstantiationErrorException e) {
-                new RuntimeException("Initialization of RoutingEngine failed: " + e.error.name());
+            if(b!=null){
+                destinationCoordinates = new GeoCoordinates( b.getDouble("Latitude"), b.getDouble("Longitude"));
+                try {
+                    routingEngine = new RoutingEngine();
+                } catch (InstantiationErrorException e) {
+                    new RuntimeException("Initialization of RoutingEngine failed: " + e.error.name());
+                }
+                addRoute(destinationCoordinates);
             }
-            addRoute(destinationCoordinates);
         }
     }
 
@@ -257,12 +246,14 @@ public class MainActivity extends AppCompatActivity {
                                 showRouteOnMap(routes.get(0), destinationCoordinates, 0x00908AA0);
                             }
                             else{
+                                showRouteOnMap(routes.get(0), destinationCoordinates,  255); //255 = noir ?
+
                                 showRouteDetails((routes.get(safest)));
                                 showRouteOnMap(routes.get(safest), destinationCoordinates, 0x00908AA0);
 
                                 //show fastest road in red
-                                //TODO: check it doesn't appear
-                                showRouteOnMap(routes.get(0), destinationCoordinates,  0x80ff0000); //255 = noir ?
+
+                                addDestinationMarker();
                             }
                         }
                         else {
@@ -289,8 +280,6 @@ public class MainActivity extends AppCompatActivity {
         mapPolylines.add(routeMapPolyline);
 
         databaseManager.getRedPoints(destination);
-
-        addDestinationMarker();
     }
 
     private void showRouteDetails(Route route) {
@@ -361,23 +350,33 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void addDestinationMarker() {
+        if(mapMarkerPOI != null){
+            mapView.getMapScene().removeMapMarker(mapMarkerPOI);
+        }
+
         MapImage mapImage = MapImageFactory.fromResource(MainActivity.this.getResources(), R.drawable.poi);
 
-        MapMarker mapMarker = new MapMarker(destinationCoordinates);
+        mapMarkerPOI = new MapMarker(destinationCoordinates);
 
         // The bottom, middle position should point to the location.
         // By default, the anchor point is set to 0.5, 0.5.
         MapMarkerImageStyle mapMarkerImageStyle = new MapMarkerImageStyle();
         mapMarkerImageStyle.setAnchorPoint(new Anchor2D(0.5F, 1));
 
-        mapMarker.addImage(mapImage, mapMarkerImageStyle);
+        mapMarkerPOI.addImage(mapImage, mapMarkerImageStyle);
 
         Metadata metadata = new Metadata();
         metadata.setString("key_poi", "This is a POI.");
-        mapMarker.setMetadata(metadata);
+        mapMarkerPOI.setMetadata(metadata);
 
-        mapView.getMapScene().addMapMarker(mapMarker);
-        mapMarkerList.add(mapMarker);
+        mapView.getMapScene().addMapMarker(mapMarkerPOI);
+    }
+
+    private void showAll(){
+        List<RiskLocation> locations = databaseManager.getAll();
+        for(int i = 0; i < locations.size(); i++){
+            addCircleMapMarker(locations.get(i).getGeoCoordinates());
+        }
     }
 
     private void addCircleMapMarker(GeoCoordinates geoCoordinates) {
@@ -406,7 +405,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        //startLocationUpdates();
         mapView.onResume();
     }
 
@@ -414,6 +412,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         mapView.onDestroy();
+        platformPositioningProvider.stopLocating();
     }
 
 }
