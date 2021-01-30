@@ -17,6 +17,6 @@
         android:height="50dp"
         android:gravity="center">
         <bitmap
-            android:src="@drawable/circle"/>
+            android:src="@drawable/report"/>
     </item>
 </layer-list>
